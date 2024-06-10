@@ -1,0 +1,70 @@
+import os
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
+from base64 import urlsafe_b64encode, urlsafe_b64decode
+from getpass import getpass
+
+def generate_key(password: str, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    key = urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
+
+def encrypt_file(file_path: str, password: str):
+    salt = os.urandom(16)
+    key = generate_key(password, salt)
+    fernet = Fernet(key)
+    
+    with open(file_path, 'rb') as file:
+        file_data = file.read()
+    
+    encrypted_data = fernet.encrypt(file_data)
+    
+    with open(file_path + '.enc', 'wb') as file:
+        file.write(salt + encrypted_data)
+    
+    os.remove(file_path)
+    print(f"File '{file_path}' has been encrypted and saved as '{file_path}.enc'.")
+
+def decrypt_file(encrypted_file_path: str, password: str):
+    with open(encrypted_file_path, 'rb') as file:
+        salt = file.read(16)
+        encrypted_data = file.read()
+    
+    key = generate_key(password, salt)
+    fernet = Fernet(key)
+    
+    try:
+        decrypted_data = fernet.decrypt(encrypted_data)
+        original_file_path = encrypted_file_path[:-4]
+        with open(original_file_path, 'wb') as file:
+            file.write(decrypted_data)
+        
+        os.remove(encrypted_file_path)
+        print(f"File '{encrypted_file_path}' has been decrypted and saved as '{original_file_path}'.")
+    except Exception as e:
+        print(f"Decryption failed: {e}")
+
+def main():
+    choice = input("Do you want to (E)ncrypt or (D)ecrypt a file? ").strip().upper()
+    if choice not in ['E', 'D']:
+        print("Invalid choice. Please select 'E' for encryption or 'D' for decryption.")
+        return
+
+    file_path = input("Enter the file path: ").strip()
+    password = getpass("Enter the password: ")
+
+    if choice == 'E':
+        encrypt_file(file_path, password)
+    elif choice == 'D':
+        decrypt_file(file_path, password)
+
+if __name__ == "__main__":
+    main()
